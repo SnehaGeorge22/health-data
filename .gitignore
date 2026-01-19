@@ -1,0 +1,87 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+venv/
+env/
+ENV/
+*.egg-info/
+dist/
+build/
+
+# Virtual Environments
+venv/
+env/
+ENV/
+env.bak/
+venv.bak/
+
+# IDEs
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+.DS_Store
+*.sublime-project
+*.sublime-workspace
+
+# Data files - don't commit large CSV files
+data/*.csv
+data/*.parquet
+data/*.pkl
+*.csv
+*.parquet
+
+# Credentials and secrets - NEVER COMMIT THESE
+.env
+.streamlit/secrets.toml
+profiles.yml
+*.pem
+*.key
+credentials.json
+.aws/credentials
+.aws/config
+
+# dbt
+dbt_retail/target/
+dbt_retail/dbt_packages/
+dbt_retail/logs/
+dbt_retail/.user.yml
+target/
+dbt_packages/
+logs/
+
+# Jupyter Notebooks
+.ipynb_checkpoints/
+*.ipynb
+
+# Logs
+*.log
+logs/
+
+# OS specific
+Thumbs.db
+.DS_Store
+desktop.ini
+
+# Temporary files
+*.tmp
+*.bak
+*.swp
+*~
+.cache/
+
+# Testing
+.pytest_cache/
+.coverage
+htmlcov/
+*.cover
+
+# Documentation build
+docs/_build/
+
+# Snowflake
+**/snowflake_credentials.json

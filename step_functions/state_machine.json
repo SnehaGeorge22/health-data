@@ -1,0 +1,623 @@
+{
+  "Comment": "Healthcare Data Pipeline – Production-ready ETL (Bronze → Silver → Gold)",
+  "StartAt": "ValidateAllDataTypes",
+  "States": {
+    "ValidateAllDataTypes": {
+      "Type": "Parallel",
+      "ResultPath": "$.validation_results",
+      "Branches": [
+        {
+          "StartAt": "ValidateBeneficiary",
+          "States": {
+            "ValidateBeneficiary": {
+              "Type": "Task",
+              "Resource": "arn:aws:lambda:us-east-1:870258691766:function:healthcare-data-validator",
+              "Parameters": {
+                "bucket": "healthcare-pipeline-raw-sg",
+                "prefix": "landing/beneficiary/",
+                "data_type": "beneficiary"
+              },
+              "End": true
+            }
+          }
+        },
+        {
+          "StartAt": "ValidateInpatient",
+          "States": {
+            "ValidateInpatient": {
+              "Type": "Task",
+              "Resource": "arn:aws:lambda:us-east-1:870258691766:function:healthcare-data-validator",
+              "Parameters": {
+                "bucket": "healthcare-pipeline-raw-sg",
+                "prefix": "landing/inpatient/",
+                "data_type": "inpatient"
+              },
+              "End": true
+            }
+          }
+        },
+        {
+          "StartAt": "ValidateOutpatient",
+          "States": {
+            "ValidateOutpatient": {
+              "Type": "Task",
+              "Resource": "arn:aws:lambda:us-east-1:870258691766:function:healthcare-data-validator",
+              "Parameters": {
+                "bucket": "healthcare-pipeline-raw-sg",
+                "prefix": "landing/outpatient/",
+                "data_type": "outpatient"
+              },
+              "End": true
+            }
+          }
+        },
+        {
+          "StartAt": "ValidateCarrier",
+          "States": {
+            "ValidateCarrier": {
+              "Type": "Task",
+              "Resource": "arn:aws:lambda:us-east-1:870258691766:function:healthcare-data-validator",
+              "Parameters": {
+                "bucket": "healthcare-pipeline-raw-sg",
+                "prefix": "landing/carrier/",
+                "data_type": "carrier"
+              },
+              "End": true
+            }
+          }
+        },
+        {
+          "StartAt": "ValidatePrescription",
+          "States": {
+            "ValidatePrescription": {
+              "Type": "Task",
+              "Resource": "arn:aws:lambda:us-east-1:870258691766:function:healthcare-data-validator",
+              "Parameters": {
+                "bucket": "healthcare-pipeline-raw-sg",
+                "prefix": "landing/prescription/",
+                "data_type": "prescription"
+              },
+              "End": true
+            }
+          }
+        }
+      ],
+      "Catch": [
+        {
+          "ErrorEquals": [
+            "States.ALL"
+          ],
+          "ResultPath": "$.validation_error",
+          "Next": "ValidationFailedNotification"
+        }
+      ],
+      "Next": "RunCrawlers"
+    },
+    "RunCrawlers": {
+      "Type": "Parallel",
+      "ResultPath": "$.crawler_results",
+      "Branches": [
+        {
+          "StartAt": "CrawlBeneficiary",
+          "States": {
+            "CrawlBeneficiary": {
+              "Type": "Task",
+              "Resource": "arn:aws:states:::aws-sdk:glue:startCrawler",
+              "Parameters": {
+                "Name": "cms-raw-beneficiary-crawler"
+              },
+              "End": true
+            }
+          }
+        },
+        {
+          "StartAt": "CrawlInpatient",
+          "States": {
+            "CrawlInpatient": {
+              "Type": "Task",
+              "Resource": "arn:aws:states:::aws-sdk:glue:startCrawler",
+              "Parameters": {
+                "Name": "cms-raw-inpatient-crawler"
+              },
+              "End": true
+            }
+          }
+        },
+        {
+          "StartAt": "CrawlOutpatient",
+          "States": {
+            "CrawlOutpatient": {
+              "Type": "Task",
+              "Resource": "arn:aws:states:::aws-sdk:glue:startCrawler",
+              "Parameters": {
+                "Name": "cms-raw-outpatient-crawler"
+              },
+              "End": true
+            }
+          }
+        },
+        {
+          "StartAt": "CrawlCarrier",
+          "States": {
+            "CrawlCarrier": {
+              "Type": "Task",
+              "Resource": "arn:aws:states:::aws-sdk:glue:startCrawler",
+              "Parameters": {
+                "Name": "cms-raw-carrier-crawler"
+              },
+              "End": true
+            }
+          }
+        },
+        {
+          "StartAt": "CrawlPrescription",
+          "States": {
+            "CrawlPrescription": {
+              "Type": "Task",
+              "Resource": "arn:aws:states:::aws-sdk:glue:startCrawler",
+              "Parameters": {
+                "Name": "cms-raw-prescription-crawler"
+              },
+              "End": true
+            }
+          }
+        }
+      ],
+      "Catch": [
+        {
+          "ErrorEquals": [
+            "States.ALL"
+          ],
+          "ResultPath": "$.crawler_error",
+          "Next": "FailWorkflow"
+        }
+      ],
+      "Next": "BronzeLayerProcessing"
+    },
+    "BronzeLayerProcessing": {
+      "Type": "Parallel",
+      "ResultPath": "$.bronze_results",
+      "Branches": [
+        {
+          "StartAt": "BronzeBeneficiary",
+          "States": {
+            "BronzeBeneficiary": {
+              "Type": "Task",
+              "Resource": "arn:aws:states:::glue:startJobRun.sync",
+              "Parameters": {
+                "JobName": "bronze-beneficiary-etl",
+                "Arguments": {
+                  "--SOURCE_DATABASE": "cms_raw",
+                  "--SOURCE_TABLE": "raw_beneficiary",
+                  "--TARGET_BUCKET": "healthcare-pipeline-bronze-sg",
+                  "--TARGET_PREFIX": "beneficiary",
+                  "--DATA_TYPE": "beneficiary",
+                  "--CMS_BRONZE_DATABASE": "cms_bronze"
+                }
+              },
+              "End": true
+            }
+          }
+        },
+        {
+          "StartAt": "BronzeClaimsProcessing",
+          "States": {
+            "BronzeClaimsProcessing": {
+              "Type": "Map",
+              "ItemsPath": "$.bronze_claims",
+              "MaxConcurrency": 3,
+              "Iterator": {
+                "StartAt": "RunBronzeClaimsJob",
+                "States": {
+                  "RunBronzeClaimsJob": {
+                    "Type": "Task",
+                    "Resource": "arn:aws:states:::glue:startJobRun.sync",
+                    "Parameters": {
+                      "JobName": "bronze-claims-etl",
+                      "Arguments": {
+                        "--SOURCE_DATABASE.$": "$.SOURCE_DATABASE",
+                        "--SOURCE_TABLE.$": "$.SOURCE_TABLE",
+                        "--TARGET_BUCKET.$": "$.TARGET_BUCKET",
+                        "--TARGET_PREFIX.$": "$.TARGET_PREFIX",
+                        "--DATA_TYPE.$": "$.DATA_TYPE",
+                        "--CMS_BRONZE_DATABASE.$": "$.CMS_BRONZE_DATABASE"
+                      }
+                    },
+                    "End": true
+                  }
+                }
+              },
+              "End": true
+            }
+          }
+        },
+        {
+          "StartAt": "BronzePrescription",
+          "States": {
+            "BronzePrescription": {
+              "Type": "Task",
+              "Resource": "arn:aws:states:::glue:startJobRun.sync",
+              "Parameters": {
+                "JobName": "bronze-prescription-etl",
+                "Arguments": {
+                  "--SOURCE_DATABASE": "cms_raw",
+                  "--SOURCE_TABLE": "raw_prescription",
+                  "--TARGET_BUCKET": "healthcare-pipeline-bronze-sg",
+                  "--TARGET_PREFIX": "prescription",
+                  "--DATA_TYPE": "prescription",
+                  "--CMS_BRONZE_DATABASE": "cms_bronze"
+                }
+              },
+              "End": true
+            }
+          }
+        }
+      ],
+      "Catch": [
+        {
+          "ErrorEquals": [
+            "States.ALL"
+          ],
+          "ResultPath": "$.bronze_error",
+          "Next": "FailWorkflow"
+        }
+      ],
+      "Next": "RunBronzeCrawlers"
+    },
+    "RunBronzeCrawlers": {
+      "Type": "Parallel",
+      "Comment": "Catalog Bronze layer with crawlers",
+      "ResultPath": null,
+      "Branches": [
+        {
+          "StartAt": "CrawlBronzeBeneficiary",
+          "States": {
+            "CrawlBronzeBeneficiary": {
+              "Type": "Task",
+              "Resource": "arn:aws:states:::aws-sdk:glue:startCrawler",
+              "Parameters": {
+                "Name": "bronze-beneficiary-crawler"
+              },
+              "Catch": [
+                {
+                  "ErrorEquals": [
+                    "States.ALL"
+                  ],
+                  "Next": "BronzeBeneficiaryCrawlerDone"
+                }
+              ],
+              "Next": "BronzeBeneficiaryCrawlerDone"
+            },
+            "BronzeBeneficiaryCrawlerDone": {
+              "Type": "Pass",
+              "End": true
+            }
+          }
+        },
+        {
+          "StartAt": "CrawlBronzeInpatient",
+          "States": {
+            "CrawlBronzeInpatient": {
+              "Type": "Task",
+              "Resource": "arn:aws:states:::aws-sdk:glue:startCrawler",
+              "Parameters": {
+                "Name": "bronze-inpatient-crawler"
+              },
+              "Catch": [
+                {
+                  "ErrorEquals": [
+                    "States.ALL"
+                  ],
+                  "Next": "BronzeInpatientCrawlerDone"
+                }
+              ],
+              "Next": "BronzeInpatientCrawlerDone"
+            },
+            "BronzeInpatientCrawlerDone": {
+              "Type": "Pass",
+              "End": true
+            }
+          }
+        },
+        {
+          "StartAt": "CrawlBronzeOutpatient",
+          "States": {
+            "CrawlBronzeOutpatient": {
+              "Type": "Task",
+              "Resource": "arn:aws:states:::aws-sdk:glue:startCrawler",
+              "Parameters": {
+                "Name": "bronze-outpatient-crawler"
+              },
+              "Catch": [
+                {
+                  "ErrorEquals": [
+                    "States.ALL"
+                  ],
+                  "Next": "BronzeOutpatientCrawlerDone"
+                }
+              ],
+              "Next": "BronzeOutpatientCrawlerDone"
+            },
+            "BronzeOutpatientCrawlerDone": {
+              "Type": "Pass",
+              "End": true
+            }
+          }
+        },
+        {
+          "StartAt": "CrawlBronzeCarrier",
+          "States": {
+            "CrawlBronzeCarrier": {
+              "Type": "Task",
+              "Resource": "arn:aws:states:::aws-sdk:glue:startCrawler",
+              "Parameters": {
+                "Name": "bronze-carrier-crawler"
+              },
+              "Catch": [
+                {
+                  "ErrorEquals": [
+                    "States.ALL"
+                  ],
+                  "Next": "BronzeCarrierCrawlerDone"
+                }
+              ],
+              "Next": "BronzeCarrierCrawlerDone"
+            },
+            "BronzeCarrierCrawlerDone": {
+              "Type": "Pass",
+              "End": true
+            }
+          }
+        },
+        {
+          "StartAt": "CrawlBronzePrescription",
+          "States": {
+            "CrawlBronzePrescription": {
+              "Type": "Task",
+              "Resource": "arn:aws:states:::aws-sdk:glue:startCrawler",
+              "Parameters": {
+                "Name": "bronze-prescription-crawler"
+              },
+              "Catch": [
+                {
+                  "ErrorEquals": [
+                    "States.ALL"
+                  ],
+                  "Next": "BronzePrescriptionCrawlerDone"
+                }
+              ],
+              "Next": "BronzePrescriptionCrawlerDone"
+            },
+            "BronzePrescriptionCrawlerDone": {
+              "Type": "Pass",
+              "End": true
+            }
+          }
+        }
+      ],
+      "Next": "WaitForBronzeCrawlers"
+    },
+    "WaitForBronzeCrawlers": {
+      "Type": "Wait",
+      "Seconds": 90,
+      "Comment": "Wait for Bronze crawlers to complete",
+      "Next": "SilverLayerProcessing"
+    },
+    "SilverLayerProcessing": {
+      "Type": "Task",
+      "Resource": "arn:aws:states:::glue:startJobRun.sync",
+      "Parameters": {
+        "JobName": "silver-layer-etl",
+        "Arguments": {
+          "--BRONZE_DATABASE": "cms_bronze",
+          "--TARGET_BUCKET": "healthcare-pipeline-silver-sg",
+          "--TARGET_PREFIX": "silver"
+        }
+      },
+      "Next": "RunSilverCrawlersInParallel"
+    },
+    "RunSilverCrawlersInParallel": {
+      "Type": "Parallel",
+      "Branches": [
+        {
+          "StartAt": "SilverBeneficiaryCrawler",
+          "States": {
+            "SilverBeneficiaryCrawler": {
+              "Type": "Task",
+              "Resource": "arn:aws:states:::aws-sdk:glue:startCrawler",
+              "Parameters": {
+                "Name": "silver-beneficiary-clean"
+              },
+              "End": true
+            }
+          }
+        },
+        {
+          "StartAt": "SilverClaimsCrawler",
+          "States": {
+            "SilverClaimsCrawler": {
+              "Type": "Task",
+              "Resource": "arn:aws:states:::aws-sdk:glue:startCrawler",
+              "Parameters": {
+                "Name": "silver-claims-unified"
+              },
+              "End": true
+            }
+          }
+        },
+        {
+          "StartAt": "SilverPrescriptionsCrawler",
+          "States": {
+            "SilverPrescriptionsCrawler": {
+              "Type": "Task",
+              "Resource": "arn:aws:states:::aws-sdk:glue:startCrawler",
+              "Parameters": {
+                "Name": "silver-prescriptions-clean"
+              },
+              "End": true
+            }
+          }
+        },
+        {
+          "StartAt": "SilverDiagnosisCrawler",
+          "States": {
+            "SilverDiagnosisCrawler": {
+              "Type": "Task",
+              "Resource": "arn:aws:states:::aws-sdk:glue:startCrawler",
+              "Parameters": {
+                "Name": "silver-diagnosis-normalized"
+              },
+              "End": true
+            }
+          }
+        }
+      ],
+      "Next": "WaitForSilverCrawlers"
+    },
+    "WaitForSilverCrawlers": {
+      "Type": "Wait",
+      "Seconds": 300,
+      "Next": "GoldLayerProcessing"
+    },
+    "GoldLayerProcessing": {
+      "Type": "Task",
+      "Resource": "arn:aws:states:::glue:startJobRun.sync",
+      "Parameters": {
+        "JobName": "gold-layer-etl",
+        "Arguments": {
+          "--SILVER_DATABASE": "cms_silver",
+          "--TARGET_BUCKET": "healthcare-pipeline-gold-sg",
+          "--TARGET_PREFIX": "gold"
+        }
+      },
+      "Next": "RunGoldCrawlersInParallel"
+    },
+    "RunGoldCrawlersInParallel": {
+      "Type": "Parallel",
+      "Branches": [
+        {
+          "StartAt": "GoldDimDateCrawler",
+          "States": {
+            "GoldDimDateCrawler": {
+              "Type": "Task",
+              "Resource": "arn:aws:states:::aws-sdk:glue:startCrawler",
+              "Parameters": {
+                "Name": "gold-dim-date"
+              },
+              "End": true
+            }
+          }
+        },
+        {
+          "StartAt": "GoldDimProviderCrawler",
+          "States": {
+            "GoldDimProviderCrawler": {
+              "Type": "Task",
+              "Resource": "arn:aws:states:::aws-sdk:glue:startCrawler",
+              "Parameters": {
+                "Name": "gold-dim-provider"
+              },
+              "End": true
+            }
+          }
+        },
+        {
+          "StartAt": "GoldDimPatientCrawler",
+          "States": {
+            "GoldDimPatientCrawler": {
+              "Type": "Task",
+              "Resource": "arn:aws:states:::aws-sdk:glue:startCrawler",
+              "Parameters": {
+                "Name": "gold-dim-patient"
+              },
+              "End": true
+            }
+          }
+        },
+        {
+          "StartAt": "GoldDimDiagnosisCrawler",
+          "States": {
+            "GoldDimDiagnosisCrawler": {
+              "Type": "Task",
+              "Resource": "arn:aws:states:::aws-sdk:glue:startCrawler",
+              "Parameters": {
+                "Name": "gold-dim-diagnosis"
+              },
+              "End": true
+            }
+          }
+        },
+        {
+          "StartAt": "GoldFactClaimsCrawler",
+          "States": {
+            "GoldFactClaimsCrawler": {
+              "Type": "Task",
+              "Resource": "arn:aws:states:::aws-sdk:glue:startCrawler",
+              "Parameters": {
+                "Name": "gold-fact-claims"
+              },
+              "End": true
+            }
+          }
+        },
+        {
+          "StartAt": "GoldFactPrescriptionsCrawler",
+          "States": {
+            "GoldFactPrescriptionsCrawler": {
+              "Type": "Task",
+              "Resource": "arn:aws:states:::aws-sdk:glue:startCrawler",
+              "Parameters": {
+                "Name": "gold-fact-prescriptions"
+              },
+              "End": true
+            }
+          }
+        },
+        {
+          "StartAt": "GoldPatientSummaryCrawler",
+          "States": {
+            "GoldPatientSummaryCrawler": {
+              "Type": "Task",
+              "Resource": "arn:aws:states:::aws-sdk:glue:startCrawler",
+              "Parameters": {
+                "Name": "gold-patient-summary"
+              },
+              "End": true
+            }
+          }
+        }
+      ],
+      "Next": "WaitForGoldCrawlers"
+    },
+    "WaitForGoldCrawlers": {
+      "Type": "Wait",
+      "Seconds": 300,
+      "Next": "SuccessNotification"
+    },
+    "SuccessNotification": {
+      "Type": "Task",
+      "Resource": "arn:aws:states:::sns:publish",
+      "Parameters": {
+        "TopicArn": "arn:aws:sns:us-east-1:870258691766:healthcare-pipeline-notifications",
+        "Subject": "Healthcare Pipeline – SUCCESS",
+        "Message.$": "$"
+      },
+      "End": true
+    },
+    "ValidationFailedNotification": {
+      "Type": "Task",
+      "Resource": "arn:aws:states:::sns:publish",
+      "Parameters": {
+        "TopicArn": "arn:aws:sns:us-east-1:870258691766:healthcare-pipeline-notifications",
+        "Subject": "Healthcare Pipeline – Validation Failed",
+        "Message.$": "$"
+      },
+      "Next": "FailWorkflow"
+    },
+    "FailWorkflow": {
+      "Type": "Fail",
+      "Error": "WorkflowFailed",
+      "Cause": "Pipeline execution failed"
+    }
+  }
+}
