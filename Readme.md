@@ -141,7 +141,6 @@ health-data/
 ├── step_functions/       # Workflow definitions
 ├── scripts/              # Utility scripts
 └── iam_roles/           # IAM policy documents
-
 ---
 ## 🧪 Data Quality & Reliability
 
