@@ -50,26 +50,6 @@ This project mirrors how **enterprise healthcare data platforms** are designed i
 
 *End-to-end data flow from S3 ingestion to Athena analytics*
 
-```
-S3 (Raw Landing Zone)
-        ↓
-Glue Crawlers (Schema Discovery)
-        ↓
-Bronze Layer (Raw + Audit)
-        ↓
-Glue Crawlers (Schema Discovery)
-        ↓
-Silver Layer (Cleaned, Standardized, SCD-2)
-        ↓
-Glue Crawlers (Schema Discovery)
-        ↓
-Gold Layer (Dimensional Model)
-        ↓
-Glue Crawlers (Schema Discovery)
-        ↓        
-Athena (Analytics & BI)
-```
-
 ### Key AWS Services Used
 
 * **Amazon S3** – Data lake storage
