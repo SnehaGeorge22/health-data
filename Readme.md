@@ -124,24 +124,6 @@ The pipeline is orchestrated using **AWS Step Functions**:
 Parallel execution is used where possible to improve performance and reduce cost.
 
 ---
-
-## 📂 Project Structure
-health-data/
-├── architecture/          # Architecture diagrams
-├── athena_queries/        # Sample analytics queries
-├── docs/                  # Documentation
-│   ├── SETUP.md
-│   ├── ARCHITECTURE.md
-│   └── outputs/          # Screenshots
-├── glue_jobs/            # PySpark ETL scripts
-│   ├── bronze/
-│   ├── silver/
-│   └── gold/
-├── lambda/               # Python Lambda functions
-├── step_functions/       # Workflow definitions
-├── scripts/              # Utility scripts
-└── iam_roles/           # IAM policy documents
----
 ## 🧪 Data Quality & Reliability
 
 * Schema validation before processing
